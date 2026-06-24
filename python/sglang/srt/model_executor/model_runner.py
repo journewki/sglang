@@ -122,6 +122,7 @@ from sglang.srt.model_executor.model_runner_components.cuda_graph_setup import (
     capture_prefill_graph,
 )
 from sglang.srt.model_executor.model_runner_components.layer_setup import (
+    ModelLayerInfo,
     adjust_hybrid_swa_layer_ids,
     resolve_layer_indices,
 )
@@ -143,6 +144,7 @@ from sglang.srt.model_executor.model_runner_components.remote_instance_weight_tr
     RemoteInstanceWeightTransport,
 )
 from sglang.srt.model_executor.model_runner_components.spec_aux_hidden_state import (
+    SpecAuxHiddenStateConfig,
     resolve_spec_aux_hidden_state_config,
 )
 from sglang.srt.model_executor.model_runner_components.weight_exporter import (
@@ -434,18 +436,14 @@ class ModelRunner:
         )
 
     def init_spec_aux_hidden_state(self):
-        config = resolve_spec_aux_hidden_state_config(
-            server_args=self.server_args,
-            model_config=self.model_config,
-            spec_algorithm=self.spec_algorithm,
-            is_draft_worker=self.is_draft_worker,
+        self.spec_aux_config: SpecAuxHiddenStateConfig = (
+            resolve_spec_aux_hidden_state_config(
+                server_args=self.server_args,
+                model_config=self.model_config,
+                spec_algorithm=self.spec_algorithm,
+                is_draft_worker=self.is_draft_worker,
+            )
         )
-        self.eagle_use_aux_hidden_state = config.eagle_use_aux_hidden_state
-        self.eagle_draft_num_layers = config.eagle_draft_num_layers
-        self.eagle_aux_hidden_state_layer_ids = config.eagle_aux_hidden_state_layer_ids
-        self.dflash_use_aux_hidden_state = config.dflash_use_aux_hidden_state
-        self.dflash_draft_num_layers = config.dflash_draft_num_layers
-        self.dflash_target_layer_ids = config.dflash_target_layer_ids
 
     def init_weight_exporter(self):
         self.weight_exporter = WeightExporter(_mr=self)
@@ -477,15 +475,15 @@ class ModelRunner:
             kv_cache_dtype=self.kv_cache_dtype,
             spec_algorithm=self.spec_algorithm,
             is_draft_worker=self.is_draft_worker,
-            dflash_draft_num_layers=self.dflash_draft_num_layers,
+            dflash_draft_num_layers=self.spec_aux_config.dflash_draft_num_layers,
             is_hybrid_swa=self.is_hybrid_swa,
             is_hybrid_swa_compress=self.is_hybrid_swa_compress,
             use_mla_backend=self.use_mla_backend,
             mambaish_config=mambaish_config(self.model_config),
             hybrid_gdn_config=hybrid_gdn_config(self.model_config),
-            start_layer=self.start_layer,
-            end_layer=self.end_layer,
-            num_effective_layers=self.num_effective_layers,
+            start_layer=self.layer_info.start_layer,
+            end_layer=self.layer_info.end_layer,
+            num_effective_layers=self.layer_info.num_effective_layers,
             req_to_token_pool=self.req_to_token_pool,
             token_to_kv_pool_allocator=self.token_to_kv_pool_allocator,
             memory_pool_config=self.memory_pool_config,
@@ -576,20 +574,17 @@ class ModelRunner:
 
         self.remote_instance_weight_transport.maybe_register_and_publish_weight_info()
 
-        layer_info = resolve_layer_indices(
+        self.layer_info: ModelLayerInfo = resolve_layer_indices(
             model=self.model,
             model_config=self.model_config,
             is_draft_worker=self.is_draft_worker,
             spec_algorithm=self.spec_algorithm,
         )
-        self.start_layer = layer_info.start_layer
-        self.end_layer = layer_info.end_layer
-        self.num_effective_layers = layer_info.num_effective_layers
 
         adjust_hybrid_swa_layer_ids(
             model_config=self.model_config,
-            start_layer=self.start_layer,
-            end_layer=self.end_layer,
+            start_layer=self.layer_info.start_layer,
+            end_layer=self.layer_info.end_layer,
             is_hybrid_swa=self.is_hybrid_swa,
         )
 
@@ -630,7 +625,7 @@ class ModelRunner:
             model_config=self.model_config,
             pp_size=self.ps.pp_size,
             pp_rank=self.ps.pp_rank,
-            start_layer=self.start_layer,
+            start_layer=self.layer_info.start_layer,
         )
 
     def alloc_memory_pool(self, memory_pool_config: Optional[MemoryPoolConfig] = None):
@@ -702,10 +697,10 @@ class ModelRunner:
         # runs with aux hidden state capture enabled.
         configure_aux_hidden_state_capture(
             model=self.model,
-            eagle_use_aux_hidden_state=self.eagle_use_aux_hidden_state,
-            eagle_aux_hidden_state_layer_ids=self.eagle_aux_hidden_state_layer_ids,
-            dflash_use_aux_hidden_state=self.dflash_use_aux_hidden_state,
-            dflash_target_layer_ids=self.dflash_target_layer_ids,
+            eagle_use_aux_hidden_state=self.spec_aux_config.eagle_use_aux_hidden_state,
+            eagle_aux_hidden_state_layer_ids=self.spec_aux_config.eagle_aux_hidden_state_layer_ids,
+            dflash_use_aux_hidden_state=self.spec_aux_config.dflash_use_aux_hidden_state,
+            dflash_target_layer_ids=self.spec_aux_config.dflash_target_layer_ids,
         )
         backends = build_attention_backends(model_runner=self)
         self.attn_backend = backends.attn_backend

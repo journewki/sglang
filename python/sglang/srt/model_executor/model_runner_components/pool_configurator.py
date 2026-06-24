@@ -119,11 +119,13 @@ class DefaultPoolConfigurator(MemoryPoolConfigurator):
             effective_layer_ids = [
                 i
                 for i in mambaish.full_attention_layer_ids
-                if model_runner.start_layer <= i < model_runner.end_layer
+                if model_runner.layer_info.start_layer
+                <= i
+                < model_runner.layer_info.end_layer
             ]
             num_layers = len(effective_layer_ids)
         else:
-            num_layers = model_runner.num_effective_layers
+            num_layers = model_runner.layer_info.num_effective_layers
 
         self._cell_size = self._compute_cell_size(model_runner, num_layers)
 
@@ -135,9 +137,7 @@ class DefaultPoolConfigurator(MemoryPoolConfigurator):
             model_runner.spec_algorithm.is_eagle()
             or model_runner.spec_algorithm.is_standalone()
         ) and not model_runner.is_draft_worker:
-            eagle_draft_num_layers = getattr(
-                model_runner, "eagle_draft_num_layers", None
-            )
+            eagle_draft_num_layers = model_runner.spec_aux_config.eagle_draft_num_layers
             if (
                 eagle_draft_num_layers is not None
                 and int(eagle_draft_num_layers) > 0
@@ -154,7 +154,7 @@ class DefaultPoolConfigurator(MemoryPoolConfigurator):
                 scale_kv_cell_size_per_token_for_dflash,
             )
 
-            draft_num_layers = model_runner.dflash_draft_num_layers
+            draft_num_layers = model_runner.spec_aux_config.dflash_draft_num_layers
             if (
                 draft_num_layers is not None
                 and int(draft_num_layers) > 0
@@ -465,12 +465,12 @@ class DSV4PoolConfigurator(MemoryPoolConfigurator):
         self.indexer_head_dim = cfg.index_head_dim
         # PP-local slice; matches DeepSeekV4TokenToKVPool's stage_ratios.
         self.compression_ratios = cfg.compress_ratios[
-            model_runner.start_layer : model_runner.end_layer
+            model_runner.layer_info.start_layer : model_runner.layer_info.end_layer
         ]
         if model_runner.ps.pp_size > 1:
             logger.info(
                 f"DSV4 pool PP slice: rank={model_runner.pp_group.rank_in_group} "
-                f"layers=[{model_runner.start_layer},{model_runner.end_layer}) "
+                f"layers=[{model_runner.layer_info.start_layer},{model_runner.layer_info.end_layer}) "
                 f"local={len(self.compression_ratios)}/{len(cfg.compress_ratios)}"
             )
         self.swa_page_size = cfg.window_size
