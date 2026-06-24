@@ -129,8 +129,16 @@ from sglang.srt.model_executor.forward_context import (
     has_forward_context,
 )
 from sglang.srt.model_executor.hook_manager import register_forward_hooks
-from sglang.srt.model_executor.model_runner_components.expert_location_helpers import (
-    get_healthy_expert_location_src_rank,
+from sglang.srt.model_executor.model_runner_components import misc_utils
+from sglang.srt.model_executor.model_runner_components.attention_backend_setup import (
+    build_attention_backends,
+    configure_aux_hidden_state_capture,
+    get_attention_backend,
+)
+from sglang.srt.model_executor.model_runner_components.cuda_graph_setup import (
+    capture_cuda_graphs,
+    capture_decode_graph,
+    capture_prefill_graph,
 )
 from sglang.srt.model_executor.model_runner_components.layer_setup import (
     adjust_hybrid_swa_layer_ids,
@@ -144,17 +152,12 @@ from sglang.srt.model_executor.model_runner_components.load_model_utils import (
     maybe_trigger_remote_instance_nccl_send_group,
     resolve_sliding_window_size,
 )
-from sglang.srt.model_executor.model_runner_components.msprobe import (
-    create_msprobe_debugger,
+from sglang.srt.model_executor.model_runner_components.moe_ep_setup import (
+    init_lplb_solvers,
+    prepare_moe_topk,
 )
 from sglang.srt.model_executor.model_runner_components.pool_configurator import (
     MemoryPoolConfig,
-)
-from sglang.srt.model_executor.model_runner_components.pp_proxy import (
-    resolve_pp_proxy_topk_size,
-)
-from sglang.srt.model_executor.model_runner_components.quantization_checks import (
-    check_quantized_moe_compatibility,
 )
 from sglang.srt.model_executor.model_runner_components.remote_instance_weight_transport import (
     RemoteInstanceWeightTransport,
@@ -452,7 +455,7 @@ class ModelRunner:
         ):
             join_process_groups()
             broadcast_global_expert_location_metadata(
-                src_rank=get_healthy_expert_location_src_rank(
+                src_rank=misc_utils.get_healthy_expert_location_src_rank(
                     invoked_in_elastic_ep_rejoin_path=True
                 )
             )
@@ -673,7 +676,7 @@ class ModelRunner:
         )
 
     def get_pp_proxy_topk_size(self) -> Optional[int]:
-        return resolve_pp_proxy_topk_size(
+        return misc_utils.resolve_pp_proxy_topk_size(
             model_config=self.model_config,
             pp_size=self.pp_size,
             pp_rank=self.pp_rank,
