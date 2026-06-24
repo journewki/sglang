@@ -26,12 +26,15 @@ from sglang.srt.mem_cache.allocator import (
     PagedTokenToKVPoolAllocator,
     TokenToKVPoolAllocator,
 )
+from sglang.srt.mem_cache.allocator.hisparse import (
+    DeepSeekV4HiSparseTokenToKVPoolAllocator,
+    HiSparseTokenToKVPoolAllocator,
+)
+from sglang.srt.mem_cache.allocator.swa import SWATokenToKVPoolAllocator
 from sglang.srt.mem_cache.common import get_req_to_token_extra_context_len
 from sglang.srt.mem_cache.deepseek_v4_memory_pool import DeepSeekV4TokenToKVPool
 from sglang.srt.mem_cache.hisparse_memory_pool import (
-    DeepSeekV4HiSparseTokenToKVPoolAllocator,
     HiSparseDSATokenToKVPool,
-    HiSparseTokenToKVPoolAllocator,
 )
 from sglang.srt.mem_cache.memory_pool import (
     DSATokenToKVPool,
@@ -43,7 +46,7 @@ from sglang.srt.mem_cache.memory_pool import (
     MLATokenToKVPoolFP4,
     NoOpMHATokenToKVPool,
 )
-from sglang.srt.mem_cache.swa_memory_pool import SWAKVPool, SWATokenToKVPoolAllocator
+from sglang.srt.mem_cache.swa_memory_pool import SWAKVPool
 from sglang.srt.platforms import current_platform
 from sglang.srt.server_args import ServerArgs
 from sglang.srt.speculative.spec_info import SpeculativeAlgorithm
@@ -148,6 +151,7 @@ class KVCacheConfigurator:
     # otherwise the target KV pool oversizes by 1+ GB on 32GB GPUs and
     # OOMs at cuda graph capture (see debug_journal 2026-05-11-kvc-...).
     dflash_draft_num_layers: Optional[int]
+    eagle_draft_num_layers: Optional[int]
     # arch flags (derived, not direct server_args fields)
     is_hybrid_swa: bool
     is_hybrid_swa_compress: bool
@@ -155,6 +159,9 @@ class KVCacheConfigurator:
     mambaish_config: Optional[Any]
     hybrid_gdn_config: Optional[Any]
     # PP slice
+    pp_size: int
+    pp_group: Any
+    attn_dp_size: int
     start_layer: int
     end_layer: int
     num_effective_layers: int
@@ -199,7 +206,7 @@ class KVCacheConfigurator:
             memory_pool_config=config,
         )
 
-    def _derive_pool_sizes(self, *, config: "MemoryPoolConfig") -> _PoolSizes:
+    def _derive_pool_sizes(self, *, config: MemoryPoolConfig) -> _PoolSizes:
         max_total_num_tokens = config.max_total_num_tokens
         max_running_requests = config.max_running_requests
         full_max_total_num_tokens = None
@@ -1045,7 +1052,10 @@ class KVCacheConfigurator:
                             need_sort=need_sort,
                             host_to_device_ratio=hisparse_cfg.host_to_device_ratio,
                         )
-                    elif self.server_args.page_size == 1 and self.server_args.dcp_size == 1:
+                    elif (
+                        self.server_args.page_size == 1
+                        and self.server_args.dcp_size == 1
+                    ):
                         token_to_kv_pool_allocator = TokenToKVPoolAllocator(
                             sizes.max_total_num_tokens,
                             dtype=self.kv_cache_dtype,
@@ -1056,7 +1066,8 @@ class KVCacheConfigurator:
                     else:
                         token_to_kv_pool_allocator = PagedTokenToKVPoolAllocator(
                             sizes.max_total_num_tokens * self.server_args.dcp_size,
-                            page_size=self.server_args.page_size * self.server_args.dcp_size,
+                            page_size=self.server_args.page_size
+                            * self.server_args.dcp_size,
                             dtype=self.kv_cache_dtype,
                             device=self.device,
                             kvcache=token_to_kv_pool,
@@ -1185,9 +1196,7 @@ class KVCacheConfigurator:
         max_num_reqs = self.server_args.max_running_requests
         if max_num_reqs is not None:
             requested_per_worker = max_num_reqs // (
-                self.server_args.dp_size
-                if self.server_args.enable_dp_attention
-                else 1
+                self.server_args.dp_size if self.server_args.enable_dp_attention else 1
             )
             max_num_reqs = min(requested_per_worker, token_capacity // 2)
         else:

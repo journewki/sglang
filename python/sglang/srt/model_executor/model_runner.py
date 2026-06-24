@@ -107,7 +107,6 @@ from sglang.srt.model_executor.forward_context import (
     forward_context,
     has_forward_context,
 )
-from sglang.srt.model_executor.hook_manager import register_forward_hooks
 from sglang.srt.model_executor.model_runner_components import misc_utils
 from sglang.srt.model_executor.model_runner_components.attention_backend_setup import (
     build_attention_backends,
@@ -372,7 +371,7 @@ class ModelRunner:
         self.init_weight_exporter()
 
     def init_msprobe(self):
-        self.msprobe_debugger = create_msprobe_debugger(self.server_args)
+        self.msprobe_debugger = misc_utils.create_msprobe_debugger(self.server_args)
 
     def init_threads_binding(self):
         self.local_omp_cpuid = numa_utils.init_threads_binding(
@@ -400,7 +399,7 @@ class ModelRunner:
         )
 
     def check_quantized_moe_compatibility(self):
-        quantization_checks.check_quantized_moe_compatibility(
+        misc_utils.check_quantized_moe_compatibility(
             model_config=self.model_config,
             tp_size=self.ps.tp_size,
             moe_ep_size=self.ps.moe_ep_size,
@@ -475,11 +474,15 @@ class ModelRunner:
             spec_algorithm=self.spec_algorithm,
             is_draft_worker=self.is_draft_worker,
             dflash_draft_num_layers=self.spec_aux_config.dflash_draft_num_layers,
+            eagle_draft_num_layers=self.spec_aux_config.eagle_draft_num_layers,
             is_hybrid_swa=self.is_hybrid_swa,
             is_hybrid_swa_compress=self.is_hybrid_swa_compress,
             use_mla_backend=self.use_mla_backend,
             mambaish_config=mambaish_config(self.model_config),
             hybrid_gdn_config=hybrid_gdn_config(self.model_config),
+            pp_size=self.ps.pp_size,
+            pp_group=self.pp_group,
+            attn_dp_size=self.ps.attn_dp_size,
             start_layer=self.layer_info.start_layer,
             end_layer=self.layer_info.end_layer,
             num_effective_layers=self.layer_info.num_effective_layers,
