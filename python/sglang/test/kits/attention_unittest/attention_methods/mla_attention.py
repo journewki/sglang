@@ -26,6 +26,7 @@ from sglang.srt.runtime_context import get_parallel
 from sglang.srt.server_args import set_global_server_args_for_scheduler
 
 from ..mock_server_args import make_mock_server_args
+from .dense_attention import make_single_gpu_parallel_state
 
 _parallel_override = get_parallel().override(attn_tp_size=1)
 _parallel_override.__enter__()
@@ -192,6 +193,7 @@ class TinyMLAModelConfig:
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=kv_lora_rank,
         )
+        self.hf_config.get_text_config = lambda: self.hf_config
         self.hf_text_config = self.hf_config
 
     def get_num_attention_heads(self, tp_size: int) -> int:
@@ -299,6 +301,7 @@ class MockMLAModelRunner(ModelRunner):
         )
         self.token_to_kv_pool_allocator = SimpleNamespace(page_size=case.page_size)
         self.attn_cp_size = 1
+        self.ps = make_single_gpu_parallel_state()
         self.attention_chunk_size = None
         self.hisparse_coordinator = None
         self.init_new_workspace = False
