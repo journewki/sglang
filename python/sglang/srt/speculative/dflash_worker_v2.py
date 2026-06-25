@@ -1459,6 +1459,13 @@ class DFlashWorkerV2(BaseSpecWorker):
             elif draft_input.reserved_seq_lens_cpu is not None:
                 seq_lens_cpu.copy_(draft_input.reserved_seq_lens_cpu)
                 draft_seq_lens_sum = int(draft_input.reserved_seq_lens_sum)
+            elif draft_input.committed_seq_lens_cpu is not None:
+                # Committed prefix lengths now live on the draft input (the shared
+                # seq_lens_cpu is the current length, not the lagging committed one).
+                seq_lens_cpu.copy_(draft_input.committed_seq_lens_cpu)
+                draft_seq_lens_sum = int(
+                    draft_input.committed_seq_lens_cpu.sum().item()
+                )
             elif model_worker_batch.seq_lens_cpu is not None:
                 seq_lens_cpu.copy_(model_worker_batch.seq_lens_cpu)
                 draft_seq_lens_sum = (

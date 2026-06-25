@@ -286,11 +286,6 @@ class FutureMap:
                 self.publish_ready.wait()
         batch.seq_lens = self.new_seq_lens_buf[fi]
 
-        if getattr(draft_input, "keeps_lagging_seq_lens_cpu", False):
-            # DFLASH keeps seq_lens_cpu as the lagging committed host view;
-            # planning/reserved host lengths live on DFlashDraftInputV2.
-            return
-
         if not self.needs_cpu_seq_lens:
             # GPU gather above is kept (SB.seq_lens must advance each verify);
             # skip the .cpu() D2H. Downstream takes the GPU-only path.
