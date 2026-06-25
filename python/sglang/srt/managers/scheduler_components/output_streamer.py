@@ -19,6 +19,7 @@ from sglang.srt.managers.io_struct import (
     BatchEmbeddingOutput,
     BatchTokenIDOutput,
     CachedTokensDetails,
+    wrap_as_pickle,
 )
 from sglang.srt.managers.schedule_batch import (
     BaseFinishReason,
@@ -212,8 +213,10 @@ class SchedulerOutputStreamer:
         if has_phs:
             all_have_phs = all(t is not None for t in phs_list)
             if all_have_phs:
-                if all(t.shape == phs_list[0].shape for t in phs_list):
-                    stacked_phs = torch.stack(phs_list)
+                if len(phs_list) > 1 and all(
+                    t.shape == phs_list[0].shape for t in phs_list
+                ):
+                    stacked_phs = [torch.stack(phs_list)]
                 else:
                     stacked_phs = phs_list
             else:
@@ -223,7 +226,7 @@ class SchedulerOutputStreamer:
             BatchEmbeddingOutput(
                 rids=rids,
                 http_worker_ipcs=http_worker_ipcs,
-                time_stats=time_stats,
+                time_stats=wrap_as_pickle(time_stats),
                 finished_reasons=finished_reasons,
                 embeddings=embeddings,
                 prompt_tokens=prompt_tokens,
@@ -510,7 +513,7 @@ class _GenerationStreamAccumulator:
             spec_verify_ct=self.spec_verify_ct,
             spec_num_correct_drafts=self.spec_num_correct_drafts,
             spec_correct_drafts_histogram=self.spec_correct_drafts_histogram,
-            time_stats=self.time_stats,
+            time_stats=wrap_as_pickle(self.time_stats),
             finished_reasons=self.finished_reasons,
             decoded_texts=self.decoded_texts,
             decode_ids=self.decode_ids_list,
@@ -543,7 +546,9 @@ class _GenerationStreamAccumulator:
             output_hidden_states=self.output_hidden_states,
             routed_experts=self.routed_experts,
             indexer_topk=self.indexer_topk,
-            customized_info=self.customized_info,
+            customized_info=(
+                wrap_as_pickle(self.customized_info) if self.customized_info else None
+            ),
             placeholder_tokens_idx=None,
             placeholder_tokens_val=None,
             retraction_counts=self.retraction_counts,
