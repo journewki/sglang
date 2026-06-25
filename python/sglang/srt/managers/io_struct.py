@@ -1385,7 +1385,9 @@ class BatchEmbeddingOutput(BaseBatchReq, kw_only=True):
     time_stats: Optional[PickleWrapper] = None  # Optional[List[SchedulerReqTimeStats]]
 
     # Optional pooled hidden states (pre-head transformer output).
-    # Sent as a single stacked tensor to minimize pickle overhead.
+    # Two IPC formats, disambiguated by len vs len(rids):
+    #   Stacked:     [stacked_tensor(N, ...)] — len 1, reduces pickle overhead
+    #   Non-stacked: [t0, t1, ..., tN]       — len N, when shapes differ or None entries exist
     pooled_hidden_states: Optional[List[Optional[torch.Tensor]]] = None
 
 
