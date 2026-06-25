@@ -224,9 +224,7 @@ class FutureMap:
         if draft_input is None:
             # FIXME(lsyin): only prefill; not compatible with mixed mode
             return
-        if self.spec_algo.is_dflash() and getattr(
-            draft_input, "direct_carry_valid", False
-        ):
+        if getattr(draft_input, "direct_carry_valid", False):
             return
         indices = draft_input.future_indices
         if indices.shape[0] == 0:
@@ -273,9 +271,7 @@ class FutureMap:
         draft_input = batch.spec_info
         if draft_input is None:
             return
-        if self.spec_algo.is_dflash() and getattr(
-            draft_input, "direct_carry_valid", False
-        ):
+        if getattr(draft_input, "direct_carry_valid", False):
             batch.seq_lens = draft_input.new_seq_lens
             return
 
@@ -290,7 +286,7 @@ class FutureMap:
                 self.publish_ready.wait()
         batch.seq_lens = self.new_seq_lens_buf[fi]
 
-        if self.spec_algo.is_dflash():
+        if getattr(draft_input, "keeps_lagging_seq_lens_cpu", False):
             # DFLASH keeps seq_lens_cpu as the lagging committed host view;
             # planning/reserved host lengths live on DFlashDraftInputV2.
             return

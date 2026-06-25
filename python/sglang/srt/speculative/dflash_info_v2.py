@@ -57,6 +57,10 @@ class DFlashDraftInputV2(SpecInput):
     reserved_seq_lens_cpu: Optional[torch.Tensor] = None
     reserved_seq_lens_sum: Optional[int] = None
     direct_carry_valid: bool = True
+    # Capability read by FutureMap.resolve_seq_lens_cpu: DFLASH owns its host
+    # seq_lens (planning lengths live here), so the relay keeps seq_lens_cpu as
+    # the lagging committed view instead of resolving/nulling it.
+    keeps_lagging_seq_lens_cpu: bool = True
     _prepare_committed_kv_lens_cpu_buf: Optional[torch.Tensor] = None
     _prepare_planning_kv_lens_cpu_buf: Optional[torch.Tensor] = None
     _prepare_batch_seq_lens_cpu_buf: Optional[torch.Tensor] = None
